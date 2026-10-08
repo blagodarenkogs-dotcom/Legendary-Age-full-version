@@ -180,44 +180,49 @@
   // ============ ПОДКЛЮЧЕНИЕ ============
   
   function connectToServer() {
-    const url = new URL(location.href);
-    const params = new URLSearchParams(url.search);
+    const params = new URLSearchParams(location.search);
     const sandbox = params.get('sandbox') || 'online';
-    const mode = params.get('mode') || '2d';
     
-    let serverUrl;
-    if (typeof window.localStorage !== 'undefined') {
-      serverUrl = localStorage.getItem(sandbox + ':server') || 'wss://legendary-age-full-version.onrender.com';
+    let serverUrl = params.get('server')
+      || (typeof localStorage !== 'undefined' && (localStorage.getItem(sandbox + ':server') || localStorage.getItem('la_server')))
+      || 'wss://legendary-age-full-version.onrender.com';
+    let token = params.get('token')
+      || (typeof localStorage !== 'undefined' && (localStorage.getItem(sandbox + ':token') || localStorage.getItem('la_token')))
+      || '';
+
+    if (location.protocol === 'https:') serverUrl = serverUrl.replace(/^ws:/, 'wss:');
+    if (!/^wss?:\/\//i.test(serverUrl)) serverUrl = 'wss://' + serverUrl;
+
+    if (!token) {
+      showToast('Нет токена — зайди через лаунчер');
+      setTimeout(() => { location.href = 'index.html'; }, 2500);
+      return;
     }
-    
-    // Преобразуем ws:// в wss:// если нужно для HTTPS
-    if (location.protocol === 'https:') {
-      serverUrl = serverUrl.replace(/^ws:/, 'wss:');
-    }
-    
+
+    showToast('Подключение к серверу…');
     game.ws = new WebSocket(serverUrl);
     
     game.ws.onopen = () => {
-      console.log('Подключено к серверу');
-      const token = localStorage.getItem(sandbox + ':token');
+      console.log('Подключено к серверу', serverUrl);
+      showToast('Связь есть, вход…');
       game.ws.send(JSON.stringify({ t: 'me', token }));
     };
     
     game.ws.onmessage = (ev) => {
       let msg;
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
-      
       handleServerMessage(msg);
     };
     
     game.ws.onerror = (err) => {
       console.error('WebSocket error:', err);
-      showToast('Ошибка подключения к серверу');
+      showToast('Ошибка WebSocket. Сервер спит?');
     };
     
     game.ws.onclose = () => {
       console.log('Отключено от сервера');
-      showToast('Соединение потеряно');
+      if (!game.char) showToast('Нет связи с сервером');
+      else showToast('Соединение потеряно');
     };
   }
   
@@ -447,38 +452,80 @@
   // ============ РЕНДЕРИНГ ============
   
   function render() {
-    // Рендерим 2D
-    ctx.fillStyle = '#04050d';
+    // Подгоняем canvas под экран
+    if (canvas2d.width !== innerWidth || canvas2d.height !== innerHeight) {
+      canvas2d.width = innerWidth;
+      canvas2d.height = innerHeight;
+    }
+    ctx.fillStyle = '#0a0c22';
     ctx.fillRect(0, 0, canvas2d.width, canvas2d.height);
-    
-    // Рендерим игрока в центре
-    if (game.char) {
-      const centerX = canvas2d.width / 2;
-      const centerY = canvas2d.height / 2;
-      
-      // Рисуем врагов
-      for (const entity of game.entities.values()) {
-        if (entity.id === 'p_' + game.char.id) continue; // Не рисуем себя
-        
-        // Относительная позиция
-        const relX = entity.x - game.char.x;
-        const relY = entity.y - game.char.y;
-        
-        const screenX = centerX + relX * 2;
-        const screenY = centerY + relY * 2;
-        
-        // Рисуем спрайт
-        if (entity.type === 'player') {
-          const modelId = DB.ensureModel({ cls: entity.cls, gender: entity.gender, hairColor: entity.hairColor, hairLen: entity.hairLen });
-          VS.draw(ctx, modelId, screenX, screenY, { s: 5, dir: entity.dir, alpha: 0.7 });
+
+    // Сетка, чтобы не было «пустого» чёрного экрана
+    ctx.strokeStyle = 'rgba(43,231,255,0.08)';
+    ctx.lineWidth = 1;
+    const step = 40;
+    for (let x = 0; x < canvas2d.width; x += step) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas2d.height); ctx.stroke();
+    }
+    for (let y = 0; y < canvas2d.height; y += step) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas2d.width, y); ctx.stroke();
+    }
+
+    if (!game.char) {
+      ctx.fillStyle = '#98a2d6';
+      ctx.font = '16px Segoe UI, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Ожидание входа в мир…', canvas2d.width / 2, canvas2d.height / 2);
+      ctx.font = '13px Segoe UI, sans-serif';
+      ctx.fillText('Если долго висит — вернись в лаунчер и войди снова', canvas2d.width / 2, canvas2d.height / 2 + 28);
+      requestAnimationFrame(render);
+      return;
+    }
+
+    const centerX = canvas2d.width / 2;
+    const centerY = canvas2d.height / 2;
+    const myId = game.char.id;
+
+    for (const entity of game.entities.values()) {
+      if (entity.id === myId) continue;
+      const relX = (entity.x - game.char.x) * 2;
+      const relY = (entity.y - game.char.y) * 2;
+      const screenX = centerX + relX;
+      const screenY = centerY + relY;
+      if (entity.type === 'player' || entity.cls) {
+        try {
+          const modelId = DB.ensureModel({
+            cls: entity.cls || 'novice',
+            gender: entity.gender || 'male',
+            hairColor: entity.hairColor || 'black',
+            hairLen: entity.hairLen || 'short'
+          });
+          VS.draw(ctx, modelId, screenX, screenY, { s: 5, dir: entity.dir || 0, alpha: 0.85 });
+        } catch (e) {
+          ctx.fillStyle = '#2be7ff';
+          ctx.beginPath(); ctx.arc(screenX, screenY, 8, 0, Math.PI * 2); ctx.fill();
         }
       }
-      
-      // Рисуем себя (в центре)
-      const modelId = DB.ensureModel({ cls: game.char.cls, gender: game.char.gender, hairColor: game.char.hairColor, hairLen: game.char.hairLen });
-      VS.draw(ctx, modelId, centerX, centerY, { s: 6, dir: game.char.dir });
     }
-    
+
+    // Себя в центре
+    try {
+      const modelId = DB.ensureModel({
+        cls: game.char.cls || 'novice',
+        gender: game.char.gender || 'male',
+        hairColor: game.char.hairColor || 'black',
+        hairLen: game.char.hairLen || 'short'
+      });
+      VS.draw(ctx, modelId, centerX, centerY, { s: 6, dir: game.char.dir || 0 });
+    } catch (e) {
+      ctx.fillStyle = '#ffcf5c';
+      ctx.beginPath(); ctx.arc(centerX, centerY, 12, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(game.char.charName || 'Вы', centerX, centerY - 18);
+    }
+
     requestAnimationFrame(render);
   }
   

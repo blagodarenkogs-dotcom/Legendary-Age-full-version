@@ -491,8 +491,14 @@
         localStorage.setItem('la_char', JSON.stringify(st.char || {}));
       } catch (e) { /* ignore */ }
       try { if (st.ws) st.ws.close(); } catch (e) { /* ignore */ }
-      if (mode === '3d') location.href = 'game.html?mode=3d';
-      else location.href = 'game-v3.html?sandbox=' + st.mode + '&mode=2d';
+      const q = new URLSearchParams({
+        sandbox: st.mode || 'online',
+        mode: mode,
+        server: st.url || 'wss://legendary-age-full-version.onrender.com',
+        token: st.token || ''
+      });
+      if (mode === '3d') location.href = 'game.html?' + q.toString();
+      else location.href = 'game-v3.html?' + q.toString();
     }
     $('play-2d').addEventListener('click', () => launch('2d'));
     $('play-3d').addEventListener('click', () => launch('3d'));
