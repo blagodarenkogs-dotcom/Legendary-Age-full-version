@@ -141,7 +141,11 @@ wss.on('connection', (ws) => {
       if (msg.t === 'register') {
         const result = game.db.registerAccount(msg.login, msg.pass);
         if (result.success) {
-          ws.send(JSON.stringify({ t: 'auth', ok: true, token: generateToken(), login: msg.login }));
+          const token = generateToken();
+          tokenMap.set(token, { accountId: result.accountId, login: msg.login, chars: [] });
+          client.token = token;
+          client.accountId = result.accountId;
+          ws.send(JSON.stringify({ t: 'auth', ok: true, token, login: msg.login, char: null }));
         } else {
           ws.send(JSON.stringify({ t: 'auth', ok: false, error: result.error }));
         }
@@ -156,6 +160,7 @@ wss.on('connection', (ws) => {
           tokenMap.set(token, { accountId: result.accountId, login: msg.login, chars });
           client.token = token;
           client.accountId = result.accountId;
+          if (chars[0]) client.charId = chars[0].id;
           ws.send(JSON.stringify({ t: 'auth', ok: true, token, login: msg.login, char: chars[0] || null }));
         } else {
           ws.send(JSON.stringify({ t: 'auth', ok: false, error: result.error }));
@@ -169,6 +174,7 @@ wss.on('connection', (ws) => {
           const chars = game.db.getAccountCharacters(session.accountId);
           client.token = msg.token;
           client.accountId = session.accountId;
+          if (chars[0]) client.charId = chars[0].id;
           ws.send(JSON.stringify({ t: 'auth', ok: true, token: msg.token, login: session.login, char: chars[0] || null }));
         } else {
           ws.send(JSON.stringify({ t: 'auth', ok: false, error: 'Invalid token' }));
@@ -207,7 +213,16 @@ wss.on('connection', (ws) => {
 
       // ---- ВХОД В ИГРУ ----
       else if (msg.t === 'join') {
-        if (!client.charId || !msg.zone) return;
+        if (!msg.zone) return;
+        // Если charId не установлен — берём первого персонажа аккаунта
+        if (!client.charId && client.accountId) {
+          const chars = game.db.getAccountCharacters(client.accountId);
+          if (chars[0]) client.charId = chars[0].id;
+        }
+        if (!client.charId) {
+          ws.send(JSON.stringify({ t: 'auth', ok: false, error: 'Нет персонажа' }));
+          return;
+        }
         
         const char = game.db.getCharacter(client.charId);
         if (!char) return;

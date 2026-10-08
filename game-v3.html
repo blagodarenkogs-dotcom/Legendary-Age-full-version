@@ -225,6 +225,16 @@
     if (msg.t === 'hello') {
       console.log('Server acknowledged');
     }
+    else if (msg.t === 'auth') {
+      if (msg.ok && msg.char) {
+        // Есть персонаж — входим в мир
+        game.ws.send(JSON.stringify({ t: 'join', zone: 'town' }));
+      } else if (msg.ok && !msg.char) {
+        showToast('Нет персонажа. Вернись в лаунчер и создай героя.');
+      } else {
+        showToast('Сессия истекла. Войди заново через лаунчер.');
+      }
+    }
     else if (msg.t === 'welcome') {
       game.zone = msg.zone;
       game.char = msg.you;
@@ -234,6 +244,7 @@
       }
       
       updateHUD();
+      showToast('Добро пожаловать в ' + (msg.zone || 'мир') + '!');
       console.log('Вошли в зону:', msg.zone);
     }
     else if (msg.t === 'd') {
