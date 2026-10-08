@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Legendary Age — Игра</title>
+  <style>
+    :root { --dark: #04050d; --panel: #0d0f26; --cyan: #2be7ff; --pink: #ff3fd0; --gold: #ffd166; --text: #e9ecff; --muted: #98a2d6; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--dark); color: var(--text); font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+    
+    #canvas2d { position: fixed; inset: 0; display: block; image-rendering: pixelated; }
+    #canvas3d { position: fixed; inset: 0; display: none; }
+    
+    #hud { position: fixed; inset: 0; pointer-events: none; z-index: 100; }
+    .card { position: absolute; background: rgba(13, 15, 38, 0.85); border: 1px solid rgba(43, 231, 255, 0.35); border-radius: 10px; padding: 12px 14px; pointer-events: auto; }
+    
+    #player-card { left: 12px; top: 12px; width: 260px; }
+    #zone-card { right: 12px; top: 12px; text-align: right; }
+    #skills-card { left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 10px; }
+    #chat-card { left: 12px; bottom: 12px; width: 330px; }
+    
+    .stat-line { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin: 4px 0; }
+    .stat-line b { color: var(--text); font-weight: 600; }
+    .bar { height: 14px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; margin: 6px 0; }
+    .bar-fill { height: 100%; background: linear-gradient(90deg, #ff3f6c, #ff7a5c); width: 100%; transition: width 0.1s; }
+    .bar.xp .bar-fill { background: linear-gradient(90deg, var(--cyan), #7a5cff); }
+    
+    .zone-name { font: 400 20px 'Palatino Linotype', Georgia, serif; margin-bottom: 8px; }
+    .gold-display { display: flex; gap: 6px; align-items: center; font-size: 18px; font-weight: 700; color: var(--gold); }
+    .coin { width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3b8, #ffcf5c 55%, #b8862a); }
+    
+    .skill-btn { position: relative; width: 100px; height: 50px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14); border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; font: 12px 'Segoe UI', sans-serif; }
+    .skill-btn kbd { font-weight: 700; color: var(--cyan); position: absolute; top: 4px; left: 6px; }
+    .skill-btn span { font-size: 11px; }
+    .skill-btn .cooldown { position: absolute; inset: 0; background: rgba(5,6,16,0.7); display: none; align-items: center; justify-content: center; font-weight: 700; border-radius: 6px; }
+    
+    #chat-log { height: 140px; overflow-y: auto; font-size: 12px; line-height: 1.4; margin-bottom: 6px; }
+    #chat-log .msg { margin: 2px 0; }
+    #chat-log .sys { color: var(--muted); }
+    #chat-log b { color: var(--cyan); }
+    #chat-input { width: 100%; padding: 6px 8px; background: rgba(5,6,16,0.85); border: 1px solid rgba(43,231,255,0.4); border-radius: 4px; color: var(--text); font: 12px 'Segoe UI', sans-serif; display: none; }
+    
+    #modals { position: fixed; inset: 0; z-index: 200; pointer-events: none; }
+    .modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--panel); border: 1px solid var(--cyan); border-radius: 12px; padding: 20px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; pointer-events: auto; display: none; }
+    .modal.show { display: block; }
+    .modal h2 { margin: 0 0 14px; font: 400 24px 'Palatino Linotype', Georgia, serif; color: var(--gold); }
+    .modal button { padding: 10px 20px; background: rgba(43,231,255,0.15); border: 1px solid var(--cyan); border-radius: 6px; color: var(--cyan); cursor: pointer; font: 600 14px 'Segoe UI', sans-serif; }
+    .modal button:hover { background: rgba(43,231,255,0.25); }
+    
+    #class-modal { } /* Выбор класса на уровне 10 */
+    #tavern-modal { } /* Таверна */
+    #guild-modal { } /* Гильдии */
+    
+    .class-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 12px 0; }
+    .class-btn { padding: 12px; text-align: center; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14); border-radius: 8px; cursor: pointer; }
+    .class-btn:hover { border-color: var(--cyan); }
+    .class-btn.selected { border-color: var(--pink); background: rgba(255,63,208,0.15); }
+    .class-icon { font-size: 28px; margin-bottom: 4px; }
+    .class-name { font-weight: 600; font-size: 13px; }
+    
+    #overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 150; display: none; }
+    
+    .notice { padding: 10px; background: rgba(255,255,255,0.05); border-left: 3px solid var(--cyan); margin: 8px 0; font-size: 12px; }
+    .notice .author { font-weight: 600; color: var(--cyan); }
+    
+    @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    .toast { position: fixed; left: 50%; top: 80px; transform: translateX(-50%); background: rgba(13, 15, 38, 0.9); border: 1px solid var(--pink); border-radius: 6px; padding: 12px 20px; animation: fadeIn 0.2s; z-index: 300; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas2d" width="1280" height="720"></canvas>
+  <div id="canvas3d"></div>
+  
+  <div id="hud">
+    <div id="player-card" class="card">
+      <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">
+        <span id="char-name">…</span>
+        <span id="char-class" style="color: var(--muted); font-size: 13px;">…</span>
+      </div>
+      <div class="stat-line"><span>HP</span><span><b id="stat-hp">0/0</b></span></div>
+      <div class="bar"><div class="bar-fill" id="bar-hp"></div></div>
+      <div class="stat-line"><span>Уровень</span><span><b id="stat-lvl">1</b></span></div>
+      <div class="bar xp"><div class="bar-fill" id="bar-xp"></div></div>
+      <div class="stat-line"><span>Опыт</span><span><b id="stat-xp">0%</b></span></div>
+      <div id="class-select-hint" style="margin-top: 10px; padding: 8px; background: rgba(255,215,90,0.1); border-left: 2px solid var(--gold); font-size: 12px; color: var(--gold); display: none;">
+        🎓 На уровне 10 можно выбрать класс!
+      </div>
+    </div>
+    
+    <div id="zone-card" class="card">
+      <div class="zone-name" id="zone-display">…</div>
+      <div class="gold-display"><span class="coin"></span><span id="gold-display">0</span></div>
+      <div style="font-size: 11px; color: var(--muted); margin-top: 6px;" id="ping-display">Ping: —</div>
+      <div style="font-size: 11px; color: var(--muted); margin-top: 2px;" id="players-display">Игроков: —</div>
+    </div>
+    
+    <div id="skills-card" class="card">
+      <button class="skill-btn" id="skill1"><kbd>1</kbd><span>Удар</span><div class="cooldown">…</div></button>
+      <button class="skill-btn" id="skill2"><kbd>2</kbd><span>Рывок</span><div class="cooldown">…</div></button>
+    </div>
+    
+    <div id="chat-card" class="card">
+      <div id="chat-log"></div>
+      <input id="chat-input" type="text" placeholder="Сообщение (Enter)" maxlength="200">
+      <div style="font-size: 10px; color: var(--muted); margin-top: 4px;">
+        Enter — чат · WASD — движение · E — взаимодействие · Esc — меню
+      </div>
+    </div>
+  </div>
+  
+  <div id="modals">
+    <div id="overlay"></div>
+    
+    <!-- Выбор класса (уровень 10) -->
+    <div id="class-modal" class="modal">
+      <h2>🎓 Выбери профессию</h2>
+      <p style="color: var(--muted); margin: 0 0 12px; font-size: 13px;">Ты достиг уровня 10! Выбери одну из 9 профессий. После выбора уровень сбросится на 1.</p>
+      <div class="class-grid" id="class-grid"></div>
+      <div style="margin-top: 14px; display: flex; gap: 10px;">
+        <button id="class-confirm" style="flex: 1;">Выбрать</button>
+        <button id="class-cancel" style="flex: 1; border-color: var(--muted); color: var(--muted);">Отмена</button>
+      </div>
+    </div>
+    
+    <!-- Таверна -->
+    <div id="tavern-modal" class="modal">
+      <h2>🍺 Таверна</h2>
+      <div style="display: flex; gap: 10px; margin-bottom: 14px;">
+        <button id="tavern-notices" style="flex: 1; background: rgba(43,231,255,0.15);">📋 Объявления</button>
+        <button id="tavern-master" style="flex: 1;">👨‍🏫 Мастер Классов</button>
+        <button id="tavern-priest" style="flex: 1;">⛪ Священник</button>
+      </div>
+      <div id="tavern-content"></div>
+      <button id="tavern-close" style="width: 100%; margin-top: 12px;">Закрыть</button>
+    </div>
+    
+    <!-- Гильдии -->
+    <div id="guild-modal" class="modal">
+      <h2>⚔️ Гильдии</h2>
+      <div id="guild-content"></div>
+      <button id="guild-close" style="width: 100%; margin-top: 12px;">Закрыть</button>
+    </div>
+  </div>
+
+  <script src="voxel-db.js"></script>
+  <script src="voxel-models.js"></script>
+  <script src="voxel2d.js"></script>
+  <script src="progression.js"></script>
+  <script src="tavern.js"></script>
+  <script src="guilds.js"></script>
+  <script src="coords-adapter.js"></script>
+  
+  <script>
+  'use strict';
+  
+  const DB = window.VoxelDB;
+  const VS = window.VoxelSprites;
+  const Progression = window.Progression;
+  const Tavern = window.Tavern;
+  const Guilds = window.Guilds;
+  const Coords = window.CoordsAdapter;
+  
+  // ============ STATE ============
+  const game = {
+    char: null,
+    zone: null,
+    ws: null,
+    ping: 0,
+    lastInputTime: 0,
+    entities: new Map(),
+    selectedClass: null,
+    input: { w: false, a: false, s: false, d: false }
+  };
+  
+  // Canvas и рендеринг
+  const canvas2d = document.getElementById('canvas2d');
+  const ctx = canvas2d.getContext('2d');
+  
+  // ============ ПОДКЛЮЧЕНИЕ ============
+  
+  function connectToServer() {
+    const url = new URL(location.href);
+    const params = new URLSearchParams(url.search);
+    const sandbox = params.get('sandbox') || 'online';
+    const mode = params.get('mode') || '2d';
+    
+    let serverUrl;
+    if (typeof window.localStorage !== 'undefined') {
+      serverUrl = localStorage.getItem(sandbox + ':server') || 'ws://localhost:8080';
+    }
+    
+    // Преобразуем ws:// в wss:// если нужно для HTTPS
+    if (location.protocol === 'https:') {
+      serverUrl = serverUrl.replace(/^ws:/, 'wss:');
+    }
+    
+    game.ws = new WebSocket(serverUrl);
+    
+    game.ws.onopen = () => {
+      console.log('Подключено к серверу');
+      const token = localStorage.getItem(sandbox + ':token');
+      game.ws.send(JSON.stringify({ t: 'me', token }));
+    };
+    
+    game.ws.onmessage = (ev) => {
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch (e) { return; }
+      
+      handleServerMessage(msg);
+    };
+    
+    game.ws.onerror = (err) => {
+      console.error('WebSocket error:', err);
+      showToast('Ошибка подключения к серверу');
+    };
+    
+    game.ws.onclose = () => {
+      console.log('Отключено от сервера');
+      showToast('Соединение потеряно');
+    };
+  }
+  
+  function handleServerMessage(msg) {
+    if (msg.t === 'hello') {
+      console.log('Server acknowledged');
+    }
+    else if (msg.t === 'welcome') {
+      game.zone = msg.zone;
+      game.char = msg.you;
+      
+      for (const entity of msg.entities || []) {
+        game.entities.set(entity.id, entity);
+      }
+      
+      updateHUD();
+      console.log('Вошли в зону:', msg.zone);
+    }
+    else if (msg.t === 'd') {
+      // State Delta update
+      for (const delta of msg.d || []) {
+        if (delta.action === 'spawn') {
+          game.entities.set(delta.entity.id, delta.entity);
+        }
+        else if (delta.action === 'despawn') {
+          game.entities.delete(delta.id);
+        }
+        else if (delta.action === 'update' && delta.delta) {
+          const entity = game.entities.get(delta.delta.id);
+          if (entity) {
+            Object.assign(entity, delta.delta);
+          }
+        }
+      }
+    }
+    else if (msg.t === 'chat') {
+      addChatMessage(`<b>${msg.from}</b>: ${msg.text}`);
+    }
+    else if (msg.t === 'class') {
+      if (msg.ok) {
+        game.char.cls = msg.cls;
+        game.char.lvl = 1;
+        game.char.xp = 0;
+        hideModal('class-modal');
+        showToast(`Ты выбрал класс ${msg.cls}!`);
+        updateHUD();
+      }
+    }
+  }
+  
+  // ============ INPUT ============
+  
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'w' || e.key === 'W') game.input.w = true;
+    if (e.key === 'a' || e.key === 'A') game.input.a = true;
+    if (e.key === 's' || e.key === 'S') game.input.s = true;
+    if (e.key === 'd' || e.key === 'D') game.input.d = true;
+    
+    if (e.key === '1') useSkill(1);
+    if (e.key === '2') useSkill(2);
+    if (e.key === 'e' || e.key === 'E') interact();
+    
+    if (e.key === 'Enter') {
+      const input = document.getElementById('chat-input');
+      if (input.style.display !== 'none') {
+        sendChat();
+      } else {
+        input.style.display = 'block';
+        input.focus();
+      }
+    }
+    if (e.key === 'Escape') {
+      document.getElementById('chat-input').style.display = 'none';
+      // Здесь можно добавить return to launcher
+    }
+  });
+  
+  document.addEventListener('keyup', (e) => {
+    if (e.key === 'w' || e.key === 'W') game.input.w = false;
+    if (e.key === 'a' || e.key === 'A') game.input.a = false;
+    if (e.key === 's' || e.key === 'S') game.input.s = false;
+    if (e.key === 'd' || e.key === 'D') game.input.d = false;
+  });
+  
+  document.getElementById('chat-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendChat();
+    if (e.key === 'Escape') e.target.style.display = 'none';
+  });
+  
+  // ============ ДЕЙСТВИЯ ============
+  
+  function sendInput() {
+    if (!game.ws || game.ws.readyState !== WebSocket.OPEN) return;
+    if (Date.now() - game.lastInputTime < 50) return; // 20 HZ
+    
+    game.ws.send(JSON.stringify({
+      t: 'input',
+      w: game.input.w,
+      a: game.input.a,
+      s: game.input.s,
+      d: game.input.d
+    }));
+    
+    game.lastInputTime = Date.now();
+  }
+  
+  function sendChat() {
+    const input = document.getElementById('chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+    
+    game.ws.send(JSON.stringify({ t: 'chat', text }));
+    input.value = '';
+    input.style.display = 'none';
+  }
+  
+  function useSkill(n) {
+    console.log('Skill', n);
+    // TODO: реализовать
+  }
+  
+  function interact() {
+    console.log('Interact');
+    // Проверяем близость к NPC (таверна, мастер, священник)
+    if (game.zone === 'town') {
+      // Показываем таверну
+      showModal('tavern-modal');
+    }
+  }
+  
+  // ============ UI ============
+  
+  function updateHUD() {
+    if (!game.char) return;
+    
+    const stats = Progression.getCharStats(game.char);
+    
+    document.getElementById('char-name').textContent = game.char.charName;
+    document.getElementById('char-class').textContent = game.char.cls === 'novice' ? 'Новичок' : DB.CLASSES[game.char.cls]?.name[game.char.gender] || '?';
+    
+    document.getElementById('stat-hp').textContent = `${game.char.hp}/${game.char.maxhp}`;
+    document.getElementById('bar-hp').style.width = ((game.char.hp / game.char.maxhp) * 100) + '%';
+    
+    document.getElementById('stat-lvl').textContent = game.char.lvl;
+    document.getElementById('stat-xp').textContent = Math.floor((game.char.xp / Progression.XP_TABLE[game.char.lvl]) * 100) + '%';
+    document.getElementById('bar-xp').style.width = ((game.char.xp / Progression.XP_TABLE[game.char.lvl]) * 100) + '%';
+    
+    document.getElementById('zone-display').textContent = game.zone;
+    document.getElementById('gold-display').textContent = game.char.gold;
+    document.getElementById('players-display').textContent = `Игроков: ${game.entities.size}`;
+    
+    // Показываем кнопку выбора класса если уровень 10
+    if (Progression.canChooseClass(game.char)) {
+      document.getElementById('class-select-hint').style.display = 'block';
+      renderClassModal();
+      showModal('class-modal');
+    }
+  }
+  
+  function renderClassModal() {
+    const grid = document.getElementById('class-grid');
+    grid.innerHTML = '';
+    
+    for (const classId of DB.CLASS_IDS) {
+      const classData = DB.CLASSES[classId];
+      const btn = document.createElement('button');
+      btn.className = 'class-btn' + (game.selectedClass === classId ? ' selected' : '');
+      btn.innerHTML = `<div class="class-icon">${classData.icon}</div><div class="class-name">${classData.name[game.char.gender]}</div>`;
+      btn.onclick = () => {
+        document.querySelectorAll('.class-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        game.selectedClass = classId;
+      };
+      grid.appendChild(btn);
+    }
+    
+    document.getElementById('class-confirm').onclick = () => {
+      if (game.selectedClass) {
+        game.ws.send(JSON.stringify({ t: 'class', cls: game.selectedClass }));
+      }
+    };
+  }
+  
+  function addChatMessage(html) {
+    const log = document.getElementById('chat-log');
+    const msg = document.createElement('div');
+    msg.className = 'msg';
+    msg.innerHTML = html;
+    log.appendChild(msg);
+    log.scrollTop = log.scrollHeight;
+    
+    // Удаляем старые сообщения
+    while (log.children.length > 20) {
+      log.removeChild(log.firstChild);
+    }
+  }
+  
+  function showModal(id) {
+    document.getElementById('overlay').style.display = 'block';
+    document.getElementById(id).classList.add('show');
+  }
+  
+  function hideModal(id) {
+    document.getElementById('overlay').style.display = 'none';
+    document.getElementById(id).classList.remove('show');
+  }
+  
+  function showToast(text) {
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = text;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
+  
+  // ============ РЕНДЕРИНГ ============
+  
+  function render() {
+    // Рендерим 2D
+    ctx.fillStyle = '#04050d';
+    ctx.fillRect(0, 0, canvas2d.width, canvas2d.height);
+    
+    // Рендерим игрока в центре
+    if (game.char) {
+      const centerX = canvas2d.width / 2;
+      const centerY = canvas2d.height / 2;
+      
+      // Рисуем врагов
+      for (const entity of game.entities.values()) {
+        if (entity.id === 'p_' + game.char.id) continue; // Не рисуем себя
+        
+        // Относительная позиция
+        const relX = entity.x - game.char.x;
+        const relY = entity.y - game.char.y;
+        
+        const screenX = centerX + relX * 2;
+        const screenY = centerY + relY * 2;
+        
+        // Рисуем спрайт
+        if (entity.type === 'player') {
+          const modelId = DB.ensureModel({ cls: entity.cls, gender: entity.gender, hairColor: entity.hairColor, hairLen: entity.hairLen });
+          VS.draw(ctx, modelId, screenX, screenY, { s: 5, dir: entity.dir, alpha: 0.7 });
+        }
+      }
+      
+      // Рисуем себя (в центре)
+      const modelId = DB.ensureModel({ cls: game.char.cls, gender: game.char.gender, hairColor: game.char.hairColor, hairLen: game.char.hairLen });
+      VS.draw(ctx, modelId, centerX, centerY, { s: 6, dir: game.char.dir });
+    }
+    
+    requestAnimationFrame(render);
+  }
+  
+  // ============ ГЛАВНЫЙ ЦИКЛ ============
+  
+  setInterval(() => {
+    sendInput();
+  }, 50);
+  
+  // ============ СТАРТ ============
+  
+  connectToServer();
+  render();
+  addChatMessage('<span class="sys">⚡ Добро пожаловать в Legendary Age!</span>');
+  
+  </script>
+</body>
+</html>

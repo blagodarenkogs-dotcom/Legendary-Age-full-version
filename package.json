@@ -1,0 +1,52 @@
+{
+  "name": "legendary-age",
+  "version": "0.3.0",
+  "description": "Medieval fantasy MMORPG — Node.js WebSocket server + Electron client",
+  "main": "server.js",
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "server": "node server.js",
+    "start:electron": "electron .",
+    "start:local": "concurrently \"npm run server\" \"npm run start:electron\"",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.legendaryage.mmorpg",
+    "productName": "Legendary Age",
+    "files": [
+      "main.js",
+      "index.html",
+      "game-v3.html",
+      "*.js",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "ws": "^8.16.0",
+    "better-sqlite3": "^9.2.2"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "electron-squirrel-startup": "^1.0.1",
+    "concurrently": "^8.2.2"
+  }
+}
