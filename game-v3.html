@@ -187,7 +187,7 @@
     
     let serverUrl;
     if (typeof window.localStorage !== 'undefined') {
-      serverUrl = localStorage.getItem(sandbox + ':server') || 'ws://localhost:8080';
+      serverUrl = localStorage.getItem(sandbox + ':server') || 'wss://legendary-age-full-version.onrender.com';
     }
     
     // Преобразуем ws:// в wss:// если нужно для HTTPS

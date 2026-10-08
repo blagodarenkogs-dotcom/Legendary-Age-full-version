@@ -118,6 +118,9 @@ wss.on('connection', (ws) => {
   
   console.log(`[${new Date().toISOString()}] Новое подключение`);
 
+  // Сразу отправляем hello — клиент ждёт его при подключении
+  try { ws.send(JSON.stringify({ t: 'hello' })); } catch (e) { /* ignore */ }
+
   ws.on('message', async (raw) => {
     try {
       // Anti-flood
@@ -133,12 +136,6 @@ wss.on('connection', (ws) => {
 
       let msg;
       try { msg = JSON.parse(raw); } catch (e) { return; }
-
-      // Отправляем heartbeat при первом подключении
-      if (!client.ws.heartbeatSent) {
-        ws.send(JSON.stringify({ t: 'hello' }));
-        client.ws.heartbeatSent = true;
-      }
 
       // ---- РЕГИСТРАЦИЯ ----
       if (msg.t === 'register') {

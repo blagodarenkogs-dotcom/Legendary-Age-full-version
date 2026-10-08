@@ -199,7 +199,7 @@
       <!-- Вход и регистрация (только для онлайна) -->
       <div id="screen-auth">
         <label for="in-server">Адрес сервера (оставь как есть или вставь свой)</label>
-        <input type="text" id="in-server" value="ws://localhost:8080" placeholder="ws://localhost:8080 или wss://твой-домен.com" spellcheck="false">
+        <input type="text" id="in-server" value="wss://legendary-age-full-version.onrender.com" placeholder="wss://legendary-age-full-version.onrender.com или wss://твой-домен.com" spellcheck="false">
         <div class="tabs" role="tablist" style="margin-top:16px">
           <button class="tab" id="tab-login" role="tab" aria-selected="true" type="button">Вход</button>
           <button class="tab" id="tab-register" role="tab" aria-selected="false" type="button">Регистрация</button>
@@ -283,19 +283,22 @@
     // ---------- режим игры ----------
     function checkServer() {
       return new Promise(res => {
-        const ws = new WebSocket('ws://localhost:8080');
-        const t = setTimeout(() => { try { ws.close(); } catch (e) {} res(false); }, 2000);
+        const ws = new WebSocket('wss://legendary-age-full-version.onrender.com');
+        const t = setTimeout(() => { try { ws.close(); } catch (e) {} res(false); }, 4000);
         ws.onopen = () => { clearTimeout(t); try { ws.close(); } catch (e) {} res(true); };
         ws.onerror = () => { clearTimeout(t); res(false); };
       });
     }
     async function showModeSelect() {
       $('screen-auth').hidden = true; $('screen-char').hidden = true; $('screen-mode').hidden = false;
-      const ok = await checkServer();
+      // Онлайн всегда доступен — не блокируем кнопку
+      $('mode-online').disabled = false;
+      $('mode-online').style.opacity = '1';
       const dot = $('dot'), txt = $('status-text');
-      if (ok) { dot.classList.add('on'); txt.textContent = 'Сервер доступен'; } 
-      else { dot.classList.remove('on'); txt.textContent = 'Сервер не найден (доступен только оффлайн режим)'; }
-      $('mode-online').disabled = !ok; if (!ok) $('mode-online').style.opacity = '0.5';
+      txt.textContent = 'Проверка сервера…';
+      const ok = await checkServer();
+      if (ok) { dot.classList.add('on'); txt.textContent = 'Сервер доступен'; }
+      else { dot.classList.remove('on'); txt.textContent = 'Сервер спит — всё равно можно выбрать Онлайн'; }
     }
     $('mode-online').addEventListener('click', () => { st.mode = 'online'; $('mode-online').classList.add('active'); $('mode-offline').classList.remove('active'); $('mode-submit').disabled = false; });
     $('mode-offline').addEventListener('click', () => { st.mode = 'offline'; $('mode-offline').classList.add('active'); $('mode-online').classList.remove('active'); $('mode-submit').disabled = false; });
@@ -304,9 +307,12 @@
     // ---------- сеть (для онлайна) ----------
     function normalizeUrl(v) {
       v = String(v || '').trim();
-      if (!v) return 'ws://localhost:8080';
+      if (!v) return 'wss://legendary-age-full-version.onrender.com';
       if (!/^wss?:\/\//i.test(v)) v = 'ws://' + v;
-      if (!/:\d+(\/|$)/.test(v.replace(/^wss?:\/\//i, ''))) v += ':8080';
+      // Порт :8080 добавляем только для localhost / IP, не для доменов (Render и т.п.)
+      const hostPart = v.replace(/^wss?:\/\//i, '');
+      const isLocal = /^(localhost|127\.|0\.0\.0\.0|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(hostPart);
+      if (isLocal && !/:\d+(\/|$)/.test(hostPart)) v += ':8080';
       return v;
     }
     function setStatus(on, text) { $('dot').classList.toggle('on', on); $('status-text').textContent = text; }
@@ -526,7 +532,7 @@
         const token = LS.get('token', st.mode);
         if (token && st.mode === 'online') {
           try {
-            const url = LS.get('server', 'online') || 'ws://localhost:8080';
+            const url = LS.get('server', 'online') || 'wss://legendary-age-full-version.onrender.com';
             $('in-server').value = url;
             await connect(url);
             st.url = url;
