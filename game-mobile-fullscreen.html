@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Legendary Age</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+
+        #gameContainer {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Контролы мобильные */
+        .mobile-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .joystick {
+            width: 100px;
+            height: 100px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            position: relative;
+            backdrop-filter: blur(10px);
+        }
+
+        .joystick::after {
+            content: '';
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .skill-buttons {
+            display: flex;
+            gap: 10px;
+            flex-direction: column;
+        }
+
+        .skill-btn {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-weight: bold;
+            font-size: 18px;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 0 20px rgba(231, 76, 60, 0.5);
+            transition: all 0.2s;
+        }
+
+        .skill-btn:active {
+            transform: scale(0.95);
+            box-shadow: 0 0 30px rgba(231, 76, 60, 0.8);
+        }
+
+        .skill-btn.s1 {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+        }
+
+        .skill-btn.s2 {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+        }
+
+        /* UI справа вверху */
+        .ui-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            padding: 15px 20px;
+            color: white;
+            font-size: 14px;
+            z-index: 100;
+            min-width: 200px;
+        }
+
+        .ui-stat {
+            margin: 8px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .ui-stat-label {
+            color: #aaa;
+        }
+
+        .ui-stat-value {
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .hp-bar {
+            width: 100%;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 5px 0 10px 0;
+        }
+
+        .hp-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #e74c3c 0%, #f39c12 100%);
+            width: 100%;
+            transition: width 0.3s;
+        }
+
+        /* Чат/Сообщения */
+        .chat-panel {
+            position: absolute;
+            bottom: 130px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            padding: 10px;
+            color: white;
+            font-size: 12px;
+            max-width: 300px;
+            max-height: 100px;
+            overflow-y: auto;
+            z-index: 100;
+        }
+
+        .chat-msg {
+            margin: 3px 0;
+            padding: 3px;
+        }
+
+        /* Миникарта */
+        #minimap {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 120px;
+            height: 120px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            z-index: 100;
+        }
+
+        /* Fullscreen */
+        .fullscreen-btn {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 100;
+            font-size: 12px;
+        }
+
+        /* Loading */
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            text-align: center;
+            z-index: 2000;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- Миникарта -->
+        <canvas id="minimap"></canvas>
+
+        <!-- UI сверху справа -->
+        <div class="ui-panel">
+            <div class="ui-stat">
+                <span class="ui-stat-label">HP</span>
+                <span class="ui-stat-value">100/100</span>
+            </div>
+            <div class="hp-bar">
+                <div class="hp-bar-fill"></div>
+            </div>
+            
+            <div class="ui-stat">
+                <span class="ui-stat-label">Уровень</span>
+                <span class="ui-stat-value">1</span>
+            </div>
+            
+            <div class="ui-stat">
+                <span class="ui-stat-label">Опыт</span>
+                <span class="ui-stat-value">0%</span>
+            </div>
+
+            <div class="ui-stat">
+                <span class="ui-stat-label">Зона</span>
+                <span class="ui-stat-value">Город</span>
+            </div>
+        </div>
+
+        <!-- Чат -->
+        <div class="chat-panel" id="chatPanel">
+            <div class="chat-msg">🎮 Добро пожаловать в Legendary Age!</div>
+        </div>
+
+        <!-- Кнопка fullscreen -->
+        <button class="fullscreen-btn" id="fullscreenBtn">Fullscreen</button>
+
+        <!-- Мобильные контролы -->
+        <div class="mobile-controls">
+            <!-- Joystick -->
+            <div class="joystick" id="joystick"></div>
+
+            <!-- Умения -->
+            <div class="skill-buttons">
+                <button class="skill-btn s1" id="skill1">1</button>
+                <button class="skill-btn s2" id="skill2">2</button>
+            </div>
+        </div>
+
+        <!-- Loading -->
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <div>Подключение к серверу...</div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const minimapCanvas = document.getElementById('minimap');
+        const minimapCtx = minimapCanvas.getContext('2d');
+
+        let gameState = {
+            you: {
+                x: 500,
+                y: 500,
+                charName: 'Герой',
+                cls: 'knight',
+                lvl: 1,
+                hp: 100,
+                maxhp: 100,
+                xp: 0,
+                zone: 'town'
+            },
+            entities: [],
+            camera: { x: 0, y: 0 }
+        };
+
+        // Установить размер canvas
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            minimapCanvas.width = 120;
+            minimapCanvas.height = 120;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // WebSocket подключение
+        let socket;
+        const loading = document.getElementById('loading');
+
+        function connectToServer() {
+            let host = localStorage.getItem('la_server') || localStorage.getItem('online:server') || 'wss://legendary-age-full-version.onrender.com';
+            const custom = prompt('Адрес сервера (wss://...):', host);
+            if (custom) host = custom.trim();
+            if (!host) return;
+            if (!/^wss?:\/\//i.test(host)) host = 'wss://' + host;
+            if (location.protocol === 'https:') host = host.replace(/^ws:/, 'wss:');
+
+            try {
+                socket = new WebSocket(host);
+
+                socket.onopen = () => {
+                    const token = localStorage.getItem('la_token') || localStorage.getItem('online:token');
+                    if (token) {
+                        socket.send(JSON.stringify({ t: 'me', token }));
+                    } else {
+                        loading.style.display = 'none';
+                        alert('Нет токена. Сначала войди через лаунчер (index.html).');
+                    }
+                };
+
+                socket.onmessage = (event) => {
+                    const msg = JSON.parse(event.data);
+                    handleMessage(msg);
+                };
+
+                socket.onerror = (err) => {
+                    console.error('WebSocket ошибка:', err);
+                    alert('Ошибка подключения! Открой https://legendary-age-full-version.onrender.com');
+                };
+
+                socket.onclose = () => {
+                    alert('Соединение потеряно');
+                };
+            } catch (e) {
+                alert('Ошибка: ' + e.message);
+            }
+        }
+
+        function handleMessage(msg) {
+            if (msg.t === 'hello') return;
+            if (msg.t === 'auth') {
+                if (msg.ok && msg.char) {
+                    socket.send(JSON.stringify({ t: 'join', zone: 'town' }));
+                } else if (msg.ok) {
+                    loading.style.display = 'none';
+                    alert('Нет персонажа. Создай героя в лаунчере.');
+                } else {
+                    loading.style.display = 'none';
+                    alert('Сессия истекла. Войди через лаунчер.');
+                }
+                return;
+            }
+            if (msg.t === 'welcome') {
+                loading.style.display = 'none';
+                gameState.you = msg.you;
+                gameState.entities = msg.entities || [];
+            }
+            if (msg.t === 'd') {
+                for (const delta of (msg.d || [])) {
+                    if (delta.action === 'update' && delta.delta && gameState.you && delta.delta.id === gameState.you.id) {
+                        Object.assign(gameState.you, delta.delta);
+                    }
+                }
+            }
+        }
+
+        // Рисование
+        function draw() {
+            // Фон
+            ctx.fillStyle = '#0f3460';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Камера следует за игроком
+            gameState.camera.x = gameState.you.x - canvas.width / 2;
+            gameState.camera.y = gameState.you.y - canvas.height / 2;
+
+            // Сетка
+            drawGrid();
+
+            // Сущности
+            for (const entity of gameState.entities) {
+                drawEntity(entity);
+            }
+
+            // Игрок в центре
+            drawPlayer(gameState.you);
+
+            // Миникарта
+            drawMinimap();
+
+            requestAnimationFrame(draw);
+        }
+
+        function drawGrid() {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 1;
+
+            for (let x = -gameState.camera.x % 50; x < canvas.width; x += 50) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+
+            for (let y = -gameState.camera.y % 50; y < canvas.height; y += 50) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+        }
+
+        function drawPlayer(player) {
+            const x = canvas.width / 2;
+            const y = canvas.height / 2;
+
+            // Персонаж
+            ctx.fillStyle = '#3498db';
+            ctx.beginPath();
+            ctx.arc(x, y, 20, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Имя
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'center';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText(player.charName, x, y - 35);
+
+            // HP бар
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(x - 30, y - 28, 60, 8);
+            
+            const hpPercent = player.hp / player.maxhp;
+            ctx.fillStyle = hpPercent > 0.5 ? '#2ecc71' : '#e74c3c';
+            ctx.fillRect(x - 30, y - 28, 60 * hpPercent, 8);
+        }
+
+        function drawEntity(entity) {
+            const x = canvas.width / 2 + (entity.x - gameState.you.x);
+            const y = canvas.height / 2 + (entity.y - gameState.you.y);
+
+            if (x < -50 || x > canvas.width + 50 || y < -50 || y > canvas.height + 50) return;
+
+            // Враг
+            ctx.fillStyle = '#e74c3c';
+            ctx.beginPath();
+            ctx.arc(x, y, 15, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Имя
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'center';
+            ctx.font = '12px Arial';
+            ctx.fillText(entity.name || 'Враг', x, y - 25);
+        }
+
+        function drawMinimap() {
+            minimapCtx.fillStyle = 'rgba(15, 52, 96, 0.8)';
+            minimapCtx.fillRect(0, 0, 120, 120);
+
+            // Бордер
+            minimapCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            minimapCtx.lineWidth = 2;
+            minimapCtx.strokeRect(0, 0, 120, 120);
+
+            // Точка игрока в центре
+            minimapCtx.fillStyle = '#3498db';
+            minimapCtx.beginPath();
+            minimapCtx.arc(60, 60, 4, 0, Math.PI * 2);
+            minimapCtx.fill();
+
+            // Враги
+            for (const entity of gameState.entities) {
+                if (Math.abs(entity.x - gameState.you.x) < 500) {
+                    const mx = 60 + (entity.x - gameState.you.x) / 500 * 60;
+                    const my = 60 + (entity.y - gameState.you.y) / 500 * 60;
+                    minimapCtx.fillStyle = '#e74c3c';
+                    minimapCtx.beginPath();
+                    minimapCtx.arc(mx, my, 2, 0, Math.PI * 2);
+                    minimapCtx.fill();
+                }
+            }
+        }
+
+        // Управление
+        document.getElementById('skill1').addEventListener('click', () => {
+            if (socket) socket.send(JSON.stringify({ t: 'input', a: 's1' }));
+        });
+
+        document.getElementById('skill2').addEventListener('click', () => {
+            if (socket) socket.send(JSON.stringify({ t: 'input', a: 's2' }));
+        });
+
+        document.getElementById('joystick').addEventListener('touchmove', (e) => {
+            const rect = e.target.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const touch = e.touches[0];
+
+            const dx = touch.clientX - centerX;
+            const dy = touch.clientY - centerY;
+
+            if (socket) {
+                socket.send(JSON.stringify({
+                    t: 'input',
+                    move: { x: dx, y: dy }
+                }));
+            }
+        });
+
+        // Fullscreen
+        document.getElementById('fullscreenBtn').addEventListener('click', () => {
+            if (document.documentElement.requestFullscreen) {
+                document.documentElement.requestFullscreen();
+            } else if (document.documentElement.webkitRequestFullscreen) {
+                document.documentElement.webkitRequestFullscreen();
+            }
+        });
+
+        // Старт
+        connectToServer();
+        draw();
+    </script>
+</body>
+</html>
