@@ -62,7 +62,7 @@
     #hud .board p { margin: 10px 0 0; font-size: 12px; color: #7f89bd; }
   </style>
   <script type="importmap">
-    { "imports": { "three": "./node_modules/three/build/three.module.js" } }
+    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
   </script>
 </head>
 <body>
@@ -119,15 +119,17 @@
     const $ = id => document.getElementById(id);
     const mode = new URLSearchParams(location.search).get('mode') === '3d' ? '3d' : '2d';
     const LS = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
-    const serverUrl = LS('la_server'), token = LS('la_token');
+    let serverUrl = LS('la_server') || LS('online:server') || 'wss://legendary-age-full-version.onrender.com';
+    let token = LS('la_token') || LS('online:token');
     let myChar = null;
-    try { myChar = JSON.parse(LS('la_char')); } catch (e) { /* ignore */ }
-    if (!serverUrl || !token || !myChar) { location.replace('index.html'); throw new Error('Нет данных входа, возвращаемся в лаунчер'); }
+    try { myChar = JSON.parse(LS('la_char') || LS('online:char') || 'null'); } catch (e) { /* ignore */ }
+    if (location.protocol === 'https:' && serverUrl) serverUrl = serverUrl.replace(/^ws:/, 'wss:');
+    if (!serverUrl || !token) { location.replace('index.html'); throw new Error('Нет данных входа, возвращаемся в лаунчер'); }
 
     // ---------- состояние (обновляется снимками от сервера) ----------
     const S = { id: null, zone: null, you: null, online: 0, ents: new Map(), fx: [], time: 0, ping: 0, leaving: false };
     let engine = null, ws = null;
-    const me = () => S.ents.get('p' + S.id);
+    const me = () => S.id ? S.ents.get(S.id) : null;
     const dirOf = (fx, fy) => Math.abs(fx) > Math.abs(fy) ? (fx < 0 ? 1 : 3) : (fy < 0 ? 2 : 0);
 
     // ---------- HUD ----------
@@ -173,31 +175,103 @@
     function lost(title, sub) { $('h-lost-t').textContent = title; $('h-lost-s').textContent = sub || ''; $('h-lost').style.display = 'flex'; }
     $('h-lost-b').addEventListener('click', exitToLauncher);
 
-    // ---------- сеть ----------
+    // ---------- сеть (протокол v0.3) ----------
     const send = o => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
+    let lastPingTs = 0;
+    function mapPlayer(p) {
+      if (!p) return null;
+      const id = p.id || ('p_' + (p.charId || p.name));
+      return {
+        key: id, kind: 'p', id,
+        x: p.x || 0, y: p.y || 0, tx: p.x || 0, ty: p.y || 0,
+        name: p.charName || p.name || 'Герой',
+        cls: p.cls || 'novice', gender: p.gender || 'male',
+        hc: p.hairColor || p.hc || 'black', hl: p.hairLen || p.hl || 'short',
+        fx: 0, fy: 0, hp: p.hp || 20, mh: p.maxhp || p.mh || 20,
+        lv: p.lvl || p.level || p.lv || 1, mv: 0, at: 0, ds: 0, dd: !!p.dd,
+        walk: 0, gt: 0, bubble: null
+      };
+    }
     function connect() {
       try { ws = new WebSocket(serverUrl); } catch (e) { lost('Неверный адрес сервера', serverUrl); return; }
-      ws.onopen = () => send({ t: 'join', token });
+      ws.onopen = () => send({ t: 'me', token });
       ws.onmessage = ev => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } onMessage(m); };
       ws.onerror = () => { if (!S.id) lost('Не удалось подключиться', 'Проверьте, что сервер запущен: ' + serverUrl); };
       ws.onclose = () => { if (!S.leaving) lost('Соединение потеряно', 'Сервер закрыл соединение.'); };
     }
     function onMessage(m) {
       switch (m.t) {
-        case 'welcome': S.id = m.id; break;
-        case 's': applySnapshot(m); break;
+        case 'hello': break;
+        case 'auth':
+          if (m.ok && (m.char || myChar)) {
+            send({ t: 'join', zone: (m.char && m.char.zone) || 'town' });
+          } else if (m.ok) {
+            lost('Нет персонажа', 'Вернись в лаунчер и создай героя.');
+          } else {
+            lost('Сессия истекла', m.error || 'Войди заново через лаунчер.');
+          }
+          break;
+        case 'welcome': {
+          const you = mapPlayer(m.you);
+          if (!you) break;
+          S.id = you.id;
+          S.zone = m.zone || 'town';
+          S.ents.clear();
+          S.ents.set(you.id, you);
+          S.you = {
+            hp: you.hp, mh: you.mh, lv: you.lv, xp: (m.you && (m.you.xp || 0)) || 0,
+            nx: 100, gold: (m.you && (m.you.gold || 0)) || 0,
+            c1: 0, c2: 0, dd: false, rs: 0
+          };
+          S.online = 1;
+          for (const ent of (m.entities || [])) {
+            if (ent.type === 'player' || ent.charName || ent.cls) {
+              const p = mapPlayer(ent);
+              if (p && p.id !== S.id) S.ents.set(p.id, p);
+            }
+          }
+          if (engine) engine.onZone();
+          toast((World.ZONES[S.zone] && World.ZONES[S.zone].name) || S.zone);
+          break;
+        }
+        case 'd':
+          for (const delta of (m.d || [])) {
+            if (delta.action === 'spawn' && delta.entity) {
+              const p = mapPlayer(delta.entity);
+              if (p) S.ents.set(p.id, p);
+            } else if (delta.action === 'despawn') {
+              S.ents.delete(delta.id);
+            } else if (delta.action === 'update' && delta.delta) {
+              const e = S.ents.get(delta.delta.id || delta.id);
+              if (e) {
+                if (delta.delta.x != null) { e.tx = delta.delta.x; e.x = delta.delta.x; }
+                if (delta.delta.y != null) { e.ty = delta.delta.y; e.y = delta.delta.y; }
+                if (delta.delta.hp != null) e.hp = delta.delta.hp;
+                if (delta.delta.maxhp != null) e.mh = delta.delta.maxhp;
+                Object.assign(e, delta.delta);
+              }
+              if (S.you && (delta.delta.id === S.id || delta.id === S.id)) {
+                if (delta.delta.hp != null) S.you.hp = delta.delta.hp;
+                if (delta.delta.maxhp != null) S.you.mh = delta.delta.maxhp;
+                if (delta.delta.gold != null) S.you.gold = delta.delta.gold;
+                if (delta.delta.lvl != null) S.you.lv = delta.delta.lvl;
+              }
+            }
+          }
+          break;
         case 'chat': {
           chatLine({ name: m.from, text: m.text });
-          const e = S.ents.get('p' + m.id); if (e) e.bubble = { text: m.text, t: S.time + 5 };
           break;
         }
         case 'sys': chatLine({ text: m.s }, 'sys'); break;
-        case 'pong': S.ping = Math.max(0, Math.round(performance.now() - m.ts)); break;
+        case 'pong':
+          if (lastPingTs) S.ping = Math.max(0, Math.round(performance.now() - lastPingTs));
+          break;
         case 'error': S.leaving = true; lost('Сервер отклонил вход', m.error); break;
         default: break;
       }
     }
-    setInterval(() => send({ t: 'ping', ts: performance.now() }), 3000);
+    setInterval(() => { lastPingTs = performance.now(); send({ t: 'ping' }); }, 3000);
 
     function applySnapshot(m) {
       if (S.zone !== m.z) {
@@ -246,13 +320,22 @@
       let ix = (held('KeyD', 'ArrowRight') ? 1 : 0) - (held('KeyA', 'ArrowLeft') ? 1 : 0);
       let iy = (held('KeyS', 'ArrowDown') ? 1 : 0) - (held('KeyW', 'ArrowUp') ? 1 : 0);
       if (chatIn === document.activeElement) { ix = 0; iy = 0; }
+      // Камера 3D: поворот WASD относительно взгляда
       const yaw = engine && engine.yaw ? engine.yaw() : 0;
-      const mx = Math.round((Math.cos(yaw) * ix + Math.sin(yaw) * iy) * 100) / 100;
-      const my = Math.round((-Math.sin(yaw) * ix + Math.cos(yaw) * iy) * 100) / 100;
-      const s1 = !!held('Digit1', 'Numpad1') && chatIn !== document.activeElement, s2 = !!held('Digit2', 'Numpad2') && chatIn !== document.activeElement;
-      const cur = { mx, my, s1, s2 };
-      const changed = !lastSent || cur.mx !== lastSent.mx || cur.my !== lastSent.my || cur.s1 !== lastSent.s1 || cur.s2 !== lastSent.s2;
-      if ((changed && now - lastSentT >= 50) || now - lastSentT > 400) { send({ t: 'input', mx, my, s1, s2 }); lastSent = cur; lastSentT = now; }
+      let wx = 0, wy = 0;
+      if (ix || iy) {
+        const mx = Math.cos(yaw) * ix + Math.sin(yaw) * iy;
+        const my = -Math.sin(yaw) * ix + Math.cos(yaw) * iy;
+        // Переводим в флаги w/a/s/d для сервера v0.3
+        if (Math.abs(my) >= Math.abs(mx)) { if (my < 0) wy = -1; else if (my > 0) wy = 1; }
+        else { if (mx < 0) wx = -1; else if (mx > 0) wx = 1; }
+      }
+      const cur = { w: wy < 0, a: wx < 0, s: wy > 0, d: wx > 0 };
+      const changed = !lastSent || cur.w !== lastSent.w || cur.a !== lastSent.a || cur.s !== lastSent.s || cur.d !== lastSent.d;
+      if ((changed && now - lastSentT >= 50) || now - lastSentT > 400) {
+        send({ t: 'input', w: cur.w, a: cur.a, s: cur.s, d: cur.d });
+        lastSent = cur; lastSentT = now;
+      }
     }
     window.addEventListener('keydown', e => {
       if (e.code === 'Escape') {
@@ -462,9 +545,10 @@
       const THREE = await import('three');
       $('c2d').hidden = true;
       let renderer;
-      try { renderer = new THREE.WebGLRenderer({ antialias: true }); }
+      try { renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }); }
       catch (e) { lost('3D недоступно', 'Видеокарта или драйвер не поддерживает WebGL. Вернитесь в лаунчер и выберите 2D.'); throw e; }
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      // Максимальное качество: до 3x DPR на мощных экранах (120 Гц / Retina)
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 3));
       renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       $('view3d').appendChild(renderer.domElement);
 
