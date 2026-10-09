@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Legendary Age</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+        #gameContainer {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);
+        }
+        canvas { display: block; width: 100%; height: 100%; }
+        
+        .mobile-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .joystick {
+            width: 100px;
+            height: 100px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            position: relative;
+        }
+        .skill-btn {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-weight: bold;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        .ui-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            padding: 15px;
+            color: white;
+            z-index: 100;
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            text-align: center;
+            z-index: 2000;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 40px;
+            border-radius: 10px;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .error { color: #e74c3c; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div class="ui-panel">
+            <div>HP: <span id="hp">-</span></div>
+            <div>Уровень: <span id="level">-</span></div>
+            <div>Опыт: <span id="xp">-</span>%</div>
+        </div>
+        <div class="mobile-controls">
+            <div class="joystick" id="joystick"></div>
+            <div style="display: flex; gap: 10px; flex-direction: column;">
+                <button class="skill-btn" id="skill1">1</button>
+                <button class="skill-btn" id="skill2">2</button>
+            </div>
+        </div>
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <div id="loadingText">🌐 Подключение к облачному серверу...</div>
+            <div id="serverInfo" style="font-size: 12px; margin-top: 10px; color: #aaa;"></div>
+            <div class="error" id="errorMsg"></div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const loading = document.getElementById('loading');
+        const loadingText = document.getElementById('loadingText');
+        const serverInfo = document.getElementById('serverInfo');
+        const errorMsg = document.getElementById('errorMsg');
+        let socket;
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        function connectToServer() {
+            // Получи URL Render сервера
+            let renderUrl = localStorage.getItem('renderUrl') || 'wss://legendary-age-server.onrender.com';
+            
+            // Проверь есть ли custom URL
+            const customUrl = prompt('Облачный сервер (вставь свой Render URL или оставь пусто):\n\nПример: wss://legendary-age-server.onrender.com', renderUrl);
+            
+            if (customUrl && customUrl.trim()) {
+                renderUrl = customUrl.trim();
+                localStorage.setItem('renderUrl', renderUrl);
+            }
+
+            if (!renderUrl) {
+                errorMsg.textContent = '❌ URL сервера не задан!';
+                return;
+            }
+
+            loadingText.textContent = `🌐 Подключение к ${renderUrl.split('//')[1]}...`;
+            serverInfo.textContent = `Облачный сервер: ${renderUrl}`;
+
+            try {
+                socket = new WebSocket(renderUrl);
+                
+                // Timeout 10 сек
+                const timeout = setTimeout(() => {
+                    socket.close();
+                    errorMsg.textContent = '❌ Timeout: сервер не отвечает (10 сек)';
+                    loadingText.textContent = '❌ Не могу подключиться';
+                }, 10000);
+
+                socket.onopen = () => {
+                    clearTimeout(timeout);
+                    loading.style.display = 'none';
+                    socket.send(JSON.stringify({ t: 'me' }));
+                    console.log('✅ Подключено!');
+                };
+
+                socket.onmessage = (event) => {
+                    try {
+                        const msg = JSON.parse(event.data);
+                        if (msg.t === 'welcome' && msg.you) {
+                            document.getElementById('hp').textContent = msg.you.hp + '/' + msg.you.maxhp;
+                            document.getElementById('level').textContent = msg.you.lvl;
+                        }
+                    } catch (e) {
+                        console.error('Parse error:', e);
+                    }
+                };
+
+                socket.onerror = (err) => {
+                    console.error('WebSocket error:', err);
+                    errorMsg.textContent = '❌ Ошибка подключения';
+                };
+
+                socket.onclose = () => {
+                    errorMsg.textContent = '❌ Соединение потеряно';
+                    loadingText.textContent = '❌ Сервер отключен';
+                };
+
+            } catch (e) {
+                errorMsg.textContent = '❌ Ошибка: ' + e.message;
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = '#0f3460';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Грид
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            for (let x = 0; x < canvas.width; x += 50) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = 0; y < canvas.height; y += 50) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+
+            // Персонаж в центре
+            ctx.fillStyle = '#3498db';
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, canvas.height / 2, 20, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'center';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText('Персонаж', canvas.width / 2, canvas.height / 2 - 30);
+
+            requestAnimationFrame(draw);
+        }
+
+        document.getElementById('skill1').addEventListener('click', () => {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ t: 'input', a: 's1' }));
+            }
+        });
+
+        document.getElementById('skill2').addEventListener('click', () => {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ t: 'input', a: 's2' }));
+            }
+        });
+
+        connectToServer();
+        draw();
+    </script>
+</body>
+</html>

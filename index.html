@@ -75,14 +75,15 @@
     .who { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; color: var(--muted); font-size: 14px; }
 
     .mode-select { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0; }
-    .mode-btn { padding: 16px; border-radius: 10px; border: 2px solid var(--line); background: #0a0c22; cursor: pointer; text-align: center; transition: all .2s; }
+    .mode-btn { padding: 16px; border-radius: 10px; border: 2px solid var(--line); background: #0a0c22; cursor: pointer; text-align: center; transition: all .2s; pointer-events: auto; position: relative; z-index: 3; }
     .mode-btn:hover { border-color: var(--cyan); }
     .mode-btn.active { border-color: var(--magenta); background: #170f2c; box-shadow: 0 0 16px rgba(255,63,208,.3); }
     .mode-btn b { display: block; font-size: 18px; margin-bottom: 4px; }
     .mode-btn span { display: block; font-size: 13px; color: var(--muted); }
 
     .castle-bg { 
-      position: absolute; inset: 0; z-index: -1; opacity: 1;
+      position: absolute; inset: 0; z-index: 0; opacity: 1;
+      pointer-events: none;
       background: linear-gradient(180deg, 
         #ff6b35 0%, 
         #f7931e 15%,
@@ -94,8 +95,14 @@
       background-attachment: fixed;
     }
     .castle-svg { 
-      position: absolute; inset: 0; z-index: 1; opacity: 0.6;
+      position: absolute; inset: 0; z-index: 0; opacity: 0.6;
+      pointer-events: none;
       filter: drop-shadow(0 0 20px rgba(0,0,0,0.8));
+    }
+    /* Контент лаунчера поверх фона и кликабелен */
+    .panel > *:not(.castle-bg):not(.castle-svg) {
+      position: relative;
+      z-index: 2;
     }
 
     @media (max-width: 900px) {
@@ -197,7 +204,7 @@
       </div>
 
       <!-- Вход и регистрация (только для онлайна) -->
-      <div id="screen-auth">
+      <div id="screen-auth" hidden>
         <label for="in-server">Адрес сервера (оставь как есть или вставь свой)</label>
         <input type="text" id="in-server" value="wss://legendary-age-full-version.onrender.com" placeholder="wss://legendary-age-full-version.onrender.com или wss://твой-домен.com" spellcheck="false">
         <div class="tabs" role="tablist" style="margin-top:16px">
